@@ -1,0 +1,37 @@
+select flag, 
+       lead_unacademy_topology_uid, 
+       goal_name, 
+       level_3, 
+       cast(trim(to_char(req_leads, '9900')) as integer) as req_leads, 
+       cast(trim(to_char(total_leads, '9900')) as integer) as total_leads, 
+       cast(trim(to_char(pct_leads, '990.99')) as decimal(10,2)) as pct_leads, 
+       rk 
+from 
+(
+select *, sum(req_leads) over(partition by lead_unacademy_topology_uid,goal_name) as total_leads, 
+          req_leads*100.00/(sum(req_leads) over(partition by lead_unacademy_topology_uid,goal_name)) as pct_leads,
+          row_number() over(partition by lead_unacademy_topology_uid, goal_name order by req_leads desc) as rk
+from 
+(
+select 2 as flag,
+       lead_unacademy_topology_uid, 
+       tt.name as goal_name, 
+       level_3, 
+       count(distinct lead_id) as req_leads   
+from sales.tbl_db_disposition_nimbus tddn 
+left join topology_topology tt on tddn.lead_unacademy_topology_uid = tt.uid 
+where tddn.created_at::date = current_date - interval '1 day' and level_1 = ('Not interested')
+group by 1,2,3,4
+union all 
+select  1 as flag, 
+       'Overall' as lead_unacademy_topology_uid, 
+       'Overall' as goal_name, 
+        level_3, 
+        count(distinct lead_id) as req_leads 
+from sales.tbl_db_disposition_nimbus tddn 
+left join topology_topology tt on tddn.lead_unacademy_topology_uid = tt.uid 
+where tddn.created_at::date = current_date - interval '1 day' and level_1 = ('Not interested') 
+group by 1,2,3,4
+)) 
+where rk <= 3 and goal_name is not null 
+order by 1,total_leads desc, goal_name; 
