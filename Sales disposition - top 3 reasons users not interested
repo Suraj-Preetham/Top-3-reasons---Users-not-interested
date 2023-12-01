@@ -1,3 +1,4 @@
+grant select on sales.tbl_db_disposition_nimbus to unacademy_services; 
 select flag, 
        lead_unacademy_topology_uid, 
        goal_name, 
