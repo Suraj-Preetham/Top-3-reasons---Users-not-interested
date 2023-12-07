@@ -1,3 +1,5 @@
+-- Format: 1 
+
 grant select on sales.tbl_db_disposition_nimbus to unacademy_services; 
 select flag, 
        lead_unacademy_topology_uid, 
@@ -34,5 +36,70 @@ left join topology_topology tt on tddn.lead_unacademy_topology_uid = tt.uid
 where tddn.created_at::date = current_date - interval '1 day' and level_1 = ('Not interested') 
 group by 1,2,3,4
 )) 
+
+---------------------------------------------------------------------------------------------------------------------------
+-- Format: 2 
+
+
+select flag, 
+       lead_unacademy_topology_uid, 
+       goal_name, 
+       level_3, 
+       CAST(trim(TO_CHAR(pct_leads, 'FM999,999.99')) AS DECIMAL(10,2)) AS pct_leads,
+       btrim(to_char(req_leads, '999,999,999,999')) as req_leads,
+       btrim(to_char(total_leads, '999,999,999,999')) as total_leads,
+       CAST(trim(TO_CHAR(req_leads, '9999')) AS INTEGER) AS req_leads_int,
+       CAST(trim(TO_CHAR(total_leads, '9999')) AS INTEGER) AS total_leads_int,
+       rk 
+from 
+(
+select *, sum(req_leads) over(partition by lead_unacademy_topology_uid,goal_name) as total_leads, 
+          req_leads*100.00/(sum(req_leads) over(partition by lead_unacademy_topology_uid,goal_name)) as pct_leads,
+          row_number() over(partition by lead_unacademy_topology_uid, goal_name order by req_leads desc) as rk
+from 
+(
+select 2 as flag,
+       lead_unacademy_topology_uid, 
+       tt.name as goal_name, 
+       level_3, 
+       count(distinct lead_id) as req_leads   
+from sales.tbl_db_disposition_nimbus tddn 
+left join topology_topology tt on tddn.lead_unacademy_topology_uid = tt.uid 
+left join sandbox_analytics.tbl_sql_final tsf 
+on tsf.learner_uid = tddn.learner_unacademy_uid and tsf.goal_uid = tddn.lead_unacademy_topology_uid and tddn.lead_id = tsf.leadid 
+where tddn.created_at::date = current_date - interval '1 day' and level_1 = ('Not interested')
+and tsf.leadid is not null 
+group by 1,2,3,4
+union all 
+select  1 as flag, 
+       'Overall' as lead_unacademy_topology_uid, 
+       'Overall' as goal_name, 
+        level_3, 
+        count(distinct lead_id) as req_leads 
+from sales.tbl_db_disposition_nimbus tddn 
+left join topology_topology tt on tddn.lead_unacademy_topology_uid = tt.uid
+left join sandbox_analytics.tbl_sql_final tsf 
+on tsf.learner_uid = tddn.learner_unacademy_uid and tsf.goal_uid = tddn.lead_unacademy_topology_uid and tddn.lead_id = tsf.leadid 
+where tddn.created_at::date = current_date - interval '1 day' and level_1 = ('Not interested') 
+and tsf.leadid is not null 
+group by 1,2,3,4
+)) 
+where rk <= 3 and goal_name is not null 
+order by 1,total_leads_int desc, goal_name
+
+
+-- Required code 
+select count(distinct tddn.lead_id) as total_leads, 
+       count(distinct case when tsf.leadid is null then tddn.lead_id else null end) as non_sql_leads, 
+       count(distinct case when tsf.leadid is not null then tddn.lead_id else null end) as sql_leads 
+from sales.tbl_db_disposition_nimbus tddn 
+left join topology_topology tt on tddn.lead_unacademy_topology_uid = tt.uid
+left join sandbox_analytics.tbl_sql_final tsf 
+on tsf.learner_uid = tddn.learner_unacademy_uid and tsf.goal_uid = tddn.lead_unacademy_topology_uid and tddn.lead_id = tsf.leadid 
+where tddn.created_at::date = current_date - interval '1 day' and level_1 = ('Not interested') 
+
+
+
+
 where rk <= 3 and goal_name is not null 
 order by 1,total_leads desc, goal_name; 
